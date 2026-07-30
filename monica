@@ -1,0 +1,683 @@
+from IPython.display import HTML, display
+
+html_code = """
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Biphasic Link - 6 Level Campaign</title>
+    <style>
+        :root {
+            --bg-color: #0a0e17;
+            --panel-bg: #111625;
+            --border-color: #1f293a;
+            --text-primary: #e0e6ed;
+            --text-secondary: #94a3b8;
+            --human-color: #00f2fe;   /* Neon Cyan */
+            --ai-color: #ff0055;      /* Neon Red */
+            --control-color: #ffe600; /* Yellow Diamond */
+            --node-color: #00ff88;    /* Green Node */
+            --exit-color: #ff4444;    /* Red Exit */
+            --key-color: #00bfff;     /* Blue Key */
+            --pink-wall: #ff00ff;     /* Pink Locked Wall */
+            --shadow-neon: 0 0 10px rgba(0, 242, 254, 0.5);
+            --font-family: 'Segoe UI', 'Roboto', 'Helvetica Neue', sans-serif;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            width: 100%;
+            height: 720px;
+            background-color: var(--bg-color);
+            color: var(--text-primary);
+            font-family: var(--font-family);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+        }
+
+        #game-container {
+            display: flex;
+            width: 95%;
+            max-width: 1100px;
+            height: 670px;
+            background-color: var(--panel-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+            overflow: hidden;
+            position: relative;
+        }
+
+        #map-section {
+            flex: 1.3;
+            padding: 20px;
+            border-right: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .header {
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 5px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid var(--border-color);
+            font-size: 0.85rem;
+        }
+
+        .title { font-size: 1.1rem; font-weight: bold; color: var(--human-color); text-shadow: var(--shadow-neon); }
+        .level-badge { color: var(--node-color); font-weight: bold; }
+        .status span { color: var(--control-color); font-weight: bold; }
+        .key-status { color: var(--key-color); font-weight: bold; }
+
+        #grid-container {
+            position: relative;
+            width: 400px;
+            height: 400px;
+            background-color: #0d111a;
+            border: 2px solid #1f293a;
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            grid-template-rows: repeat(5, 1fr);
+            margin: auto 0;
+        }
+
+        .cell {
+            border: 1px solid #1a202c;
+            position: relative;
+        }
+
+        /* Visible Cyan Walls */
+        .wall-t { border-top: 3px solid var(--human-color) !important; box-shadow: 0 -2px 5px rgba(0,242,254,0.3); }
+        .wall-b { border-bottom: 3px solid var(--human-color) !important; box-shadow: 0 2px 5px rgba(0,242,254,0.3); }
+        .wall-l { border-left: 3px solid var(--human-color) !important; box-shadow: -2px 0 5px rgba(0,242,254,0.3); }
+        .wall-r { border-right: 3px solid var(--human-color) !important; box-shadow: 2px 0 5px rgba(0,242,254,0.3); }
+
+        /* Pink Locked Wall */
+        .pink-wall-r { border-right: 4px dashed var(--pink-wall) !important; box-shadow: 2px 0 8px rgba(255,0,255,0.4); }
+        .pink-wall-l { border-left: 4px dashed var(--pink-wall) !important; box-shadow: -2px 0 8px rgba(255,0,255,0.4); }
+        .pink-wall-b { border-bottom: 4px dashed var(--pink-wall) !important; box-shadow: 0 2px 8px rgba(255,0,255,0.4); }
+        .pink-wall-t { border-top: 4px dashed var(--pink-wall) !important; box-shadow: 0 -2px 8px rgba(255,0,255,0.4); }
+
+        /* Map Items */
+        .node {
+            position: absolute; width: 26px; height: 26px; border-radius: 50%;
+            border: 3px solid var(--node-color); box-shadow: 0 0 12px var(--node-color);
+            top: 50%; left: 50%; transform: translate(-50%, -50%); opacity: 0.85;
+        }
+
+        .exit {
+            position: absolute; width: 28px; height: 28px; background-color: var(--exit-color);
+            box-shadow: 0 0 15px var(--exit-color); top: 50%; left: 50%;
+            transform: translate(-50%, -50%); border-radius: 4px;
+        }
+
+        .key-item {
+            position: absolute; width: 20px; height: 20px; background-color: var(--key-color);
+            box-shadow: 0 0 12px var(--key-color); top: 50%; left: 50%;
+            transform: translate(-50%, -50%) rotate(45deg); border-radius: 3px;
+        }
+
+        #token {
+            position: absolute; width: 26px; height: 26px; top: 27px; left: 27px;
+            transition: all 0.2s ease-out; z-index: 10;
+            display: flex; justify-content: center; align-items: center;
+        }
+
+        .diamond {
+            width: 100%; height: 100%; background-color: var(--control-color);
+            transform: rotate(45deg); box-shadow: 0 0 15px var(--control-color); border-radius: 3px;
+        }
+
+        .token-ai .diamond {
+            background-color: transparent; border: 3px solid var(--control-color);
+            box-shadow: 0 0 12px var(--control-color), inset 0 0 8px var(--control-color);
+        }
+
+        #btn-restart {
+            padding: 8px 16px; background: none; border: 1px solid var(--border-color);
+            color: var(--text-secondary); border-radius: 6px; cursor: pointer;
+            transition: all 0.2s; font-size: 0.85rem;
+        }
+        #btn-restart:hover { background-color: #1f293a; color: white; }
+
+        #comm-section {
+            flex: 1; padding: 20px; display: flex; flex-direction: column; justify-content: space-between;
+        }
+
+        .comm-header {
+            color: var(--text-primary); font-weight: bold; margin-bottom: 10px;
+            padding-bottom: 10px; border-bottom: 1px solid var(--border-color); font-size: 0.95rem;
+        }
+
+        #chat-window {
+            flex: 1; background-color: #0d111a; border: 1px solid var(--border-color);
+            border-radius: 8px; padding: 15px; overflow-y: auto; margin-bottom: 12px;
+            display: flex; flex-direction: column; gap: 12px; max-height: 400px;
+        }
+
+        .message {
+            max-width: 85%; padding: 8px 12px; border-radius: 8px;
+            font-size: 0.8rem; line-height: 1.4; position: relative;
+        }
+
+        .message.ai {
+            align-self: flex-start; background-color: #1f1f2e; border: 1px solid rgba(255, 0, 85, 0.3);
+            color: #ffcccc; border-top-left-radius: 0;
+        }
+        .message.ai::before { content: 'Adam (AI)'; position: absolute; top: -16px; left: 0; font-size: 0.7rem; color: var(--ai-color); font-weight: bold; }
+
+        .message.human {
+            align-self: flex-end; background-color: #162b3a; border: 1px solid rgba(0, 242, 254, 0.3);
+            color: #ccf9ff; border-top-right-radius: 0;
+        }
+        .message.human::before { content: 'You (Player)'; position: absolute; top: -16px; right: 0; font-size: 0.7rem; color: var(--human-color); font-weight: bold; }
+
+        .message.sys {
+            align-self: center; background-color: #2d3748; color: var(--text-secondary);
+            font-size: 0.7rem; text-align: center; border-radius: 4px; padding: 4px 8px;
+        }
+
+        #input-area { display: flex; gap: 10px; margin-bottom: 10px; }
+
+        #chat-input {
+            flex: 1; padding: 8px 10px; background-color: #0d111a;
+            border: 1px solid var(--border-color); border-radius: 6px;
+            color: var(--text-primary); font-size: 0.85rem;
+        }
+
+        #btn-send {
+            padding: 0 14px; background-color: #1f293a; color: var(--text-primary);
+            border: none; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 0.85rem;
+        }
+
+        #btn-transfer {
+            width: 100%; padding: 10px; background: #111625; color: var(--text-secondary);
+            border: 2px solid var(--border-color); border-radius: 8px; font-weight: bold;
+            cursor: not-allowed; transition: all 0.3s; font-size: 0.8rem;
+        }
+
+        #btn-transfer.active {
+            border-color: var(--node-color); color: var(--node-color);
+            box-shadow: 0 0 15px rgba(0, 255, 136, 0.4); cursor: pointer;
+        }
+
+        #win-overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background-color: rgba(0,0,0,0.88); display: none; flex-direction: column;
+            justify-content: center; align-items: center; z-index: 100; color: var(--node-color);
+        }
+    </style>
+</head>
+<body>
+
+    <div id="game-container">
+        <div id="map-section">
+            <div class="header">
+                <div class="title">BIPHASIC LINK</div>
+                <div class="level-badge">Level <span id="level-num">1</span> / 6</div>
+                <div class="status">Control: <span id="control-status">You</span></div>
+                <div class="key-status">Key: <span id="key-status-text">Missing</span></div>
+            </div>
+
+            <div id="grid-container">
+                <div id="token"><div class="diamond"></div></div>
+            </div>
+
+            <button id="btn-restart" onclick="restartLevel()">Reset Level</button>
+        </div>
+
+        <div id="comm-section">
+            <div class="comm-header">Terminal (Talk to Adam)</div>
+            <div id="chat-window"></div>
+            <div id="input-area">
+                <input type="text" id="chat-input" placeholder="Type command..." autocomplete="off">
+                <button id="btn-send">Send</button>
+            </div>
+            <button id="btn-transfer">Pass Control</button>
+        </div>
+    </div>
+
+    <div id="win-overlay">
+        <h2 id="win-title">Level Completed!</h2>
+        <p id="win-sub" style="margin-top:10px; color: #94a3b8;">Data channel synchronized.</p>
+        <button id="btn-next" style="margin-top: 20px; padding: 10px 20px; background: none; border: 2px solid var(--node-color); color: var(--node-color); border-radius: 6px; font-weight: bold; cursor: pointer;" onclick="nextLevel()">Next Level</button>
+    </div>
+
+    <script>
+        const GRID_SIZE = 5;
+        const CELL_PIXEL_SIZE = 80;
+
+        let currentLevelIndex = 0;
+
+        // 6 个关卡数据库 (完全平滑解密，独立无死角)
+        const LEVELS = [
+            // Level 1: 基础认知 (直路拿钥匙 -> 节点 -> AI开门)
+            {
+                start: { y: 0, x: 0 },
+                key: { y: 0, x: 4 },
+                nodes: [{ y: 2, x: 2 }],
+                exit: { y: 4, x: 4 },
+                humanMaze: [
+                    ['', '', '', '', ''],
+                    ['wall-b', 'wall-r', '', 'wall-l', ''],
+                    ['', '', '', '', 'wall-b'],
+                    ['wall-r', '', 'wall-b', 'pink-wall-r', ''],
+                    ['', '', '', '', '']
+                ],
+                aiMaze: [
+                    ['', '', 'b', '', ''],
+                    ['', 'r', '', '', ''],
+                    ['b', '', '', 'r', ''],
+                    ['', '', '', '', ''],
+                    ['', '', '', '', '']
+                ],
+                intro: "Level 1: Collect Key at (0,4), then go to Node (2,2) and pass control."
+            },
+
+            // Level 2: 隐藏迷宫 (AI 隐形墙增多，需要在终端逐步打 down/right 指挥 AI 绕路)
+            {
+                start: { y: 0, x: 0 },
+                key: { y: 4, x: 0 },
+                nodes: [{ y: 2, x: 1 }],
+                exit: { y: 0, x: 4 },
+                humanMaze: [
+                    ['', 'wall-r', '', '', 'pink-wall-b'],
+                    ['', 'wall-r', '', '', ''],
+                    ['', 'wall-b', '', 'wall-l', ''],
+                    ['', '', '', '', ''],
+                    ['', 'wall-r', '', '', '']
+                ],
+                aiMaze: [
+                    ['', '', 'r', '', ''],
+                    ['b', '', 'r', 'b', ''],
+                    ['', '', '', '', ''],
+                    ['r', '', 'b', '', 'r'],
+                    ['', '', '', 'r', '']
+                ],
+                intro: "Level 2: Get Key at bottom-left (4,0), head to Node (2,1). Guide AI to navigate around unseen barriers to top-right exit!"
+            },
+
+            // Level 3: 狭窄通道与盲区绕行
+            {
+                start: { y: 0, x: 0 },
+                key: { y: 0, x: 2 },
+                nodes: [{ y: 4, x: 2 }],
+                exit: { y: 4, x: 4 },
+                humanMaze: [
+                    ['wall-b', '', '', 'wall-b', ''],
+                    ['', 'wall-r', 'wall-r', '', ''],
+                    ['', 'wall-b', '', 'wall-b', ''],
+                    ['wall-r', '', '', '', 'pink-wall-r'],
+                    ['', '', '', '', '']
+                ],
+                aiMaze: [
+                    ['', 'r', '', '', ''],
+                    ['', '', '', '', 'b'],
+                    ['r', '', 'r', '', ''],
+                    ['', 'b', '', 'r', ''],
+                    ['', '', '', '', '']
+                ],
+                intro: "Level 3: Precise routing required. Reach key at (0,2), walk to bottom Node (4,2), and direct AI through narrow pink gate."
+            },
+
+            // Level 4: 两次控制权转换 (Player -> AI -> Player -> AI)
+            {
+                start: { y: 0, x: 0 },
+                key: { y: 2, x: 4 },
+                nodes: [{ y: 1, x: 1 }, { y: 3, x: 3 }],
+                exit: { y: 4, x: 0 },
+                humanMaze: [
+                    ['', '', 'wall-r', '', ''],
+                    ['', '', '', 'wall-b', ''],
+                    ['wall-b', '', 'wall-r', '', ''],
+                    ['pink-wall-b', '', '', '', ''],
+                    ['', 'wall-r', '', '', '']
+                ],
+                aiMaze: [
+                    ['', 'b', '', '', ''],
+                    ['', '', 'r', '', ''],
+                    ['', 'b', '', '', ''],
+                    ['', '', '', 'r', ''],
+                    ['', '', 'r', '', '']
+                ],
+                intro: "Level 4: Multiple transfer nodes detected! Switch control strategically between Node (1,1) and Node (3,3)."
+            },
+
+            // Level 5: 迷宫隔断 + 双向锁墙
+            {
+                start: { y: 4, x: 0 },
+                key: { y: 0, x: 0 },
+                nodes: [{ y: 2, x: 4 }],
+                exit: { y: 4, x: 4 },
+                humanMaze: [
+                    ['', 'wall-r', '', '', ''],
+                    ['wall-b', '', 'wall-r', '', 'pink-wall-b'],
+                    ['', '', 'wall-b', '', ''],
+                    ['', 'wall-r', '', 'wall-l', ''],
+                    ['', '', '', '', '']
+                ],
+                aiMaze: [
+                    ['', '', 'b', '', 'r'],
+                    ['', 'r', '', '', ''],
+                    ['r', '', '', 'b', ''],
+                    ['', '', 'r', '', ''],
+                    ['', 'b', '', '', '']
+                ],
+                intro: "Level 5: Start at bottom-left! Reach top-left Key (0,0), detour to Node (2,4) and clear the pink obstruction."
+            },
+
+            // Level 6: 终极双盲阵列 (全面复杂关卡)
+            {
+                start: { y: 0, x: 0 },
+                key: { y: 4, x: 2 },
+                nodes: [{ y: 0, x: 4 }, { y: 2, x: 0 }],
+                exit: { y: 4, x: 4 },
+                humanMaze: [
+                    ['', 'wall-b', '', '', ''],
+                    ['wall-r', '', 'wall-b', 'wall-r', ''],
+                    ['', '', '', '', 'pink-wall-b'],
+                    ['', 'wall-r', 'wall-t', '', ''],
+                    ['', '', '', 'pink-wall-r', '']
+                ],
+                aiMaze: [
+                    ['', 'r', '', 'b', ''],
+                    ['b', '', '', '', 'r'],
+                    ['', 'r', 'b', '', ''],
+                    ['', '', '', 'r', ''],
+                    ['r', '', '', '', '']
+                ],
+                intro: "Level 6 [MASTER]: Final challenge! Synchronize dual perspectives with multiple locks and invisible barrier grid."
+            }
+        ];
+
+        let state = {
+            pos: { y: 0, x: 0 },
+            hasKey: false,
+            controller: 'human',
+            isGameOver: false
+        };
+
+        const grid = document.getElementById('grid-container');
+        const token = document.getElementById('token');
+        const chatWindow = document.getElementById('chat-window');
+        const chatInput = document.getElementById('chat-input');
+        const btnSend = document.getElementById('btn-send');
+        const btnTransfer = document.getElementById('btn-transfer');
+        const controlStatus = document.getElementById('control-status');
+        const keyStatusText = document.getElementById('key-status-text');
+        const winOverlay = document.getElementById('win-overlay');
+        const levelNumDom = document.getElementById('level-num');
+
+        function loadLevel(idx) {
+            currentLevelIndex = idx;
+            const lvl = LEVELS[idx];
+            
+            state.pos = { ...lvl.start };
+            state.hasKey = false;
+            state.controller = 'human';
+            state.isGameOver = false;
+
+            levelNumDom.innerText = idx + 1;
+            winOverlay.style.display = 'none';
+
+            renderGrid();
+            updateUI();
+
+            chatWindow.innerHTML = '';
+            addMessage('ai', lvl.intro);
+            addMessage('sys', 'Use Arrow Keys to move.');
+        }
+
+        function restartLevel() {
+            loadLevel(currentLevelIndex);
+        }
+
+        function nextLevel() {
+            if (currentLevelIndex + 1 < LEVELS.length) {
+                loadLevel(currentLevelIndex + 1);
+            } else {
+                loadLevel(0); // 重新开始
+            }
+        }
+
+        function renderGrid() {
+            const lvl = LEVELS[currentLevelIndex];
+            grid.querySelectorAll('.cell').forEach(c => c.remove());
+
+            for (let y = 0; y < GRID_SIZE; y++) {
+                for (let x = 0; x < GRID_SIZE; x++) {
+                    const cell = document.createElement('div');
+                    cell.className = `cell ${lvl.humanMaze[y][x]}`;
+
+                    if (!state.hasKey && lvl.key.y === y && lvl.key.x === x) {
+                        const keyDom = document.createElement('div');
+                        keyDom.className = 'key-item';
+                        cell.appendChild(keyDom);
+                    }
+
+                    if (lvl.nodes.some(n => n.y === y && n.x === x)) {
+                        const nodeDom = document.createElement('div');
+                        nodeDom.className = 'node';
+                        cell.appendChild(nodeDom);
+                    }
+
+                    if (lvl.exit.y === y && lvl.exit.x === x) {
+                        const exitDom = document.createElement('div');
+                        exitDom.className = 'exit';
+                        cell.appendChild(exitDom);
+                    }
+
+                    grid.appendChild(cell);
+                }
+            }
+        }
+
+        function isWallBetween(y1, x1, y2, x2, wallSet) {
+            if (y2 < 0 || y2 >= GRID_SIZE || x2 < 0 || x2 >= GRID_SIZE) return true;
+
+            const str1 = wallSet[y1][x1];
+            const str2 = wallSet[y2][x2];
+
+            if (y2 < y1) return str1.includes('t') || str1.includes('wall-t') || str2.includes('b') || str2.includes('wall-b');
+            if (y2 > y1) return str1.includes('b') || str1.includes('wall-b') || str2.includes('t') || str2.includes('wall-t');
+            if (x2 < x1) return str1.includes('l') || str1.includes('wall-l') || str2.includes('r') || str2.includes('wall-r');
+            if (x2 > x1) return str1.includes('r') || str1.includes('wall-r') || str2.includes('l') || str2.includes('wall-l');
+            return false;
+        }
+
+        function attemptMove(dir) {
+            if (state.isGameOver) return;
+
+            const lvl = LEVELS[currentLevelIndex];
+            const cur = state.pos;
+            let next = { y: cur.y, x: cur.x };
+
+            switch (dir) {
+                case 'up': next.y--; break;
+                case 'down': next.y++; break;
+                case 'left': next.x--; break;
+                case 'right': next.x++; break;
+            }
+
+            if (next.y < 0 || next.y >= GRID_SIZE || next.x < 0 || next.x >= GRID_SIZE) {
+                notifyBlocked("Boundary hit.");
+                return;
+            }
+
+            const blockedHuman = isWallBetween(cur.y, cur.x, next.y, next.x, lvl.humanMaze);
+            const blockedAi = isWallBetween(cur.y, cur.x, next.y, next.x, lvl.aiMaze);
+
+            const isPink = lvl.humanMaze[cur.y][cur.x].includes('pink') || lvl.humanMaze[next.y][next.x].includes('pink');
+
+            if (isPink) {
+                if (state.hasKey) {
+                    lvl.humanMaze[cur.y][cur.x] = lvl.humanMaze[cur.y][cur.x].replace(/pink-wall-[tblr]/g, '');
+                    lvl.humanMaze[next.y][next.x] = lvl.humanMaze[next.y][next.x].replace(/pink-wall-[tblr]/g, '');
+                    state.hasKey = false;
+                    addMessage('sys', 'Pink Wall unlocked with Key!');
+                    addMessage('ai', 'Passage clear! Proceed to exit!');
+                } else {
+                    notifyBlocked("Pink wall locked! Get [Key] first!");
+                    return;
+                }
+            } else if (blockedHuman) {
+                notifyBlocked("Hit visible cyan wall.");
+                return;
+            } else if (blockedAi && state.controller === 'ai') {
+                addMessage('ai', `Hidden obstacle heading ${dir}. Try alternative turn!`);
+                return;
+            }
+
+            state.pos = next;
+
+            if (!state.hasKey && next.y === lvl.key.y && next.x === lvl.x) {
+                // Key pick up
+            }
+            if (!state.hasKey && next.y === lvl.key.y && next.x === lvl.key.x) {
+                state.hasKey = true;
+                addMessage('sys', 'Key acquired!');
+                addMessage('ai', 'Key secured! Find Green Node to pass control!');
+            }
+
+            renderGrid();
+            updateUI();
+
+            if (next.y === lvl.exit.y && next.x === lvl.exit.x) {
+                triggerWin();
+            }
+        }
+
+        function notifyBlocked(txt) {
+            if (state.controller === 'human') addMessage('sys', txt);
+            else addMessage('ai', txt);
+        }
+
+        function triggerWin() {
+            state.isGameOver = true;
+            addMessage('sys', `Level ${currentLevelIndex + 1} Cleared!`);
+            
+            if (currentLevelIndex + 1 >= LEVELS.length) {
+                document.getElementById('win-title').innerText = "CAMPAIGN COMPLETE!";
+                document.getElementById('win-sub').innerText = "You successfully solved all 6 Biphasic link levels!";
+                document.getElementById('btn-next').innerText = "Play Again";
+            } else {
+                document.getElementById('win-title').innerText = `Level ${currentLevelIndex + 1} Cleared!`;
+                document.getElementById('win-sub').innerText = "Data link synchronized. Next chamber unlocked.";
+                document.getElementById('btn-next').innerText = "Next Level";
+            }
+            setTimeout(() => winOverlay.style.display = 'flex', 300);
+        }
+
+        function updateUI() {
+            const topPos = state.pos.y * CELL_PIXEL_SIZE + (CELL_PIXEL_SIZE - 26) / 2;
+            const leftPos = state.pos.x * CELL_PIXEL_SIZE + (CELL_PIXEL_SIZE - 26) / 2;
+            token.style.top = `${topPos}px`;
+            token.style.left = `${leftPos}px`;
+
+            if (state.controller === 'human') {
+                controlStatus.innerText = "You";
+                controlStatus.style.color = "var(--human-color)";
+                token.className = '';
+                chatInput.disabled = false;
+                chatInput.placeholder = "Type message or command...";
+            } else {
+                controlStatus.innerText = "Adam (AI)";
+                controlStatus.style.color = "var(--ai-color)";
+                token.className = 'token-ai';
+                chatInput.placeholder = "Command AI (up, down, left, right)...";
+            }
+
+            keyStatusText.innerText = state.hasKey ? "Collected" : "Missing";
+
+            const lvl = LEVELS[currentLevelIndex];
+            const isOnNode = lvl.nodes.some(n => n.y === state.pos.y && n.x === state.pos.x);
+
+            if (isOnNode && !state.isGameOver) {
+                btnTransfer.classList.add('active');
+                btnTransfer.disabled = false;
+            } else {
+                btnTransfer.classList.remove('active');
+                btnTransfer.disabled = true;
+            }
+        }
+
+        function addMessage(sender, text) {
+            const msgDiv = document.createElement('div');
+            msgDiv.className = `message ${sender}`;
+            msgDiv.innerText = text;
+            chatWindow.appendChild(msgDiv);
+            chatWindow.scrollTop = chatWindow.scrollHeight;
+        }
+
+        function handleSendMessage() {
+            const text = chatInput.value.trim().toLowerCase();
+            if (!text) return;
+
+            addMessage('human', text);
+            chatInput.value = '';
+
+            if (state.controller === 'ai') {
+                parseAiCommand(text);
+            } else {
+                setTimeout(() => addMessage('ai', 'Acknowledged. Use arrow keys to navigate.'), 350);
+            }
+        }
+
+        function parseAiCommand(text) {
+            let matched = false;
+            if (text.includes('up') || text.includes('north')) { attemptMove('up'); matched = true; }
+            else if (text.includes('down') || text.includes('south')) { attemptMove('down'); matched = true; }
+            else if (text.includes('left') || text.includes('west')) { attemptMove('left'); matched = true; }
+            else if (text.includes('right') || text.includes('east')) { attemptMove('right'); matched = true; }
+
+            if (!matched) {
+                setTimeout(() => addMessage('ai', 'Need movement commands: "up", "down", "left", "right".'), 350);
+            }
+        }
+
+        function handleTransfer() {
+            if (state.controller === 'human') {
+                state.controller = 'ai';
+                addMessage('sys', 'Control transferred to Adam.');
+                addMessage('ai', 'I have control! Guide me with terminal commands.');
+            } else {
+                state.controller = 'human';
+                addMessage('sys', 'Control returned to Player.');
+                addMessage('ai', 'Control back to you.');
+            }
+            updateUI();
+        }
+
+        document.addEventListener('keydown', (e) => {
+            if (state.controller !== 'human' || state.isGameOver) return;
+            if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) e.preventDefault();
+
+            switch (e.key) {
+                case 'ArrowUp': attemptMove('up'); break;
+                case 'ArrowDown': attemptMove('down'); break;
+                case 'ArrowLeft': attemptMove('left'); break;
+                case 'ArrowRight': attemptMove('right'); break;
+            }
+        });
+
+        btnSend.addEventListener('click', handleSendMessage);
+        chatInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') handleSendMessage(); });
+        btnTransfer.addEventListener('click', handleTransfer);
+
+        // 初始化加载 Level 1
+        loadLevel(0);
+    </script>
+</body>
+</html>
+"""
+
+display(HTML(html_code))
