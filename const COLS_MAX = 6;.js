@@ -7,7 +7,7 @@ const NONE = 0;
 const ORANGE = 1;
 const PINK = 2;
 
-// Generate 15 levels dynamically with guaranteed solvability
+// 15 levels config
 const LEVELS = [
     // LEVEL 1: 4x4
     {
@@ -103,8 +103,8 @@ const LEVELS = [
             hWalls: [[0,1,1,0,0],[1,0,0,2,1],[0,1,2,0,0],[1,0,0,1,1]]
         },
         l2: {
-            vWalls: [[1,0,1,0],[0,2,0,1],[0,2,0,1],[0,2,0,1],[1,0,2,0]], // Opened vWall[2][0] (changed from 1 to 0)
-            hWalls: [[1,0,0,1,1],[0,0,2,0,0],[1,0,0,1,1],[0,2,1,0,0]]  // Opened hWall[1][1] (changed from 1 to 0)
+            vWalls: [[1,0,1,0],[0,2,0,1],[0,2,0,1],[0,2,0,1],[1,0,2,0]], 
+            hWalls: [[1,0,0,1,1],[0,0,2,0,0],[1,0,0,1,1],[0,2,1,0,0]]  
         }
     },
     // LEVEL 8: 5x5
@@ -223,14 +223,34 @@ const LEVELS = [
 
 // --- Game State ---
 let currentLevelIndex = 0;
+let gameMode = 'player'; // 'player' or 'ai'
 let gameState = {
     running: false,
     diamondHolder: 'Fish', 
     fish: { r: 0, c: 0 },
     adam: { r: 0, c: 0 },
     hasKey: false,
-    hasFlag: false
+    hasFlag: false,
+    aiActions: [],
+    aiTimer: null
 };
+
+// State Space Node for BFS Pathfinder
+class StateNode {
+    constructor(r, c, holder, hasKey, hasFlag, parent = null, action = null) {
+        this.r = r;
+        this.c = c;
+        this.holder = holder; // 'Fish' or 'Adam'
+        this.hasKey = hasKey;
+        this.hasFlag = hasFlag;
+        this.parent = parent;
+        this.action = action; // { type: 'move'|'swap', dr, dc }
+    }
+
+    key() {
+        return `${this.r},${this.c},${this.holder},${this.hasKey},${this.hasFlag}`;
+    }
+}
 
 const canvas1 = document.getElementById('canvas-l1');
 const ctx1 = canvas1.getContext('2d');
@@ -242,6 +262,13 @@ const passBtn = document.getElementById('pass-diamond-btn');
 
 let lastResponseTime = 0;
 
+function selectMode(mode) {
+    gameMode = mode;
+    document.getElementById('mode-display').innerText = mode === 'player' ? 'Player vs AI' : 'AI vs AI';
+    document.getElementById('view-title').innerText = mode === 'player' ? 'Your View (Level 1)' : 'Estella\'s View (Level 1)';
+    initGame();
+}
+
 function initGame() {
     document.getElementById('start-screen').classList.add('hidden');
     document.getElementById('main-ui').classList.remove('hidden');
@@ -252,6 +279,11 @@ function initGame() {
 }
 
 function loadLevel(index) {
+    if (gameState.aiTimer) {
+        clearInterval(gameState.aiTimer);
+        gameState.aiTimer = null;
+    }
+
     const level = LEVELS[index];
     gameState.fish = { r: 0, c: 0 };
     gameState.adam = { r: 0, c: 0 };
@@ -261,16 +293,173 @@ function loadLevel(index) {
 
     // Update level display texts
     document.getElementById('level-display').innerText = `Level ${index + 1} / ${LEVELS.length}`;
-    document.getElementById('view-title').innerText = `Your View (Level ${index + 1})`;
+    document.getElementById('view-title').innerText = gameMode === 'player' ? `Your View (Level ${index + 1})` : `Estella's View (Level ${index + 1})`;
+
+    // Reset Chat panel
+    chatHistory.innerHTML = '';
 
     addChat("System", `--- Loading Level ${index + 1} (${level.rows}x${level.cols}) ---`);
-    addChat("Adam", `We are in Level ${index + 1}! Coordinate with me through the chat. Tell me "up", "down", "left", or "right" when I have the Diamond!`);
+    
+    if (gameMode === 'player') {
+        addChat("Adam", `We are in Level ${index + 1}! Coordinate with me through the chat. Tell me "up", "down", "left", or "right" when I have the Diamond!`);
+    } else {
+        addChat("Adam", `System initialised. Estella, I'm ready to run our collaborative autopilot program for Level ${index + 1}!`);
+        // Solve level and start autopilot simulation
+        gameState.aiActions = solveLevel(index);
+        if (gameState.aiActions && gameState.aiActions.length > 0) {
+            gameState.aiTimer = setInterval(runNextAIStep, 1500);
+        } else {
+            addChat("System", "Error: No solution path found for this level!");
+        }
+    }
+}
+
+// BFS Solver for Lockstep Entanglement state space
+function solveLevel(index) {
+    const level = LEVELS[index];
+    const startNode = new StateNode(0, 0, 'Fish', false, false);
+    const queue = [startNode];
+    const visited = new Set();
+    visited.add(startNode.key());
+
+    const directions = [
+        {dr: -1, dc: 0, label: 'up'},
+        {dr: 1, dc: 0, label: 'down'},
+        {dr: 0, dc: -1, label: 'left'},
+        {dr: 0, dc: 1, label: 'right'}
+    ];
+
+    while (queue.length > 0) {
+        const curr = queue.shift();
+
+        // Goal check: Exit at bottom-right cell with Flag captured
+        if (curr.r === level.rows - 1 && curr.c === level.cols - 1 && curr.hasFlag) {
+            // Reconstruct path
+            const path = [];
+            let n = curr;
+            while (n.parent !== null) {
+                path.unshift(n.action);
+                n = n.parent;
+            }
+            // Append final exit step to the right to trigger level exit transition
+            path.push({ type: 'move', dr: 0, dc: 1, label: 'right' });
+            return path;
+        }
+
+        const isFishControl = curr.holder === 'Fish';
+        const vWalls = isFishControl ? level.l1.vWalls : level.l2.vWalls;
+        const hWalls = isFishControl ? level.l1.hWalls : level.l2.hWalls;
+
+        // Transition 1: Move in 4 directions
+        for (const dir of directions) {
+            const nr = curr.r + dir.dr;
+            const nc = curr.c + dir.dc;
+
+            if (nr < 0 || nr >= level.rows || nc < 0 || nc >= level.cols) continue;
+
+            let canMove = true;
+            if (dir.dc === 1) { 
+                let w = vWalls[curr.r][curr.c];
+                if (w === ORANGE || (w === PINK && !curr.hasKey)) canMove = false;
+            } else if (dir.dc === -1) { 
+                if (curr.c - 1 >= 0) {
+                    let w = vWalls[curr.r][curr.c - 1];
+                    if (w === ORANGE || (w === PINK && !curr.hasKey)) canMove = false;
+                } else canMove = false;
+            } else if (dir.dr === 1) { 
+                let w = hWalls[curr.r][curr.c];
+                if (w === ORANGE || (w === PINK && !curr.hasKey)) canMove = false;
+            } else if (dir.dr === -1) { 
+                if (curr.r - 1 >= 0) {
+                    let w = hWalls[curr.r - 1][curr.c];
+                    if (w === ORANGE || (w === PINK && !curr.hasKey)) canMove = false;
+                } else canMove = false;
+            }
+
+            if (canMove) {
+                let nextHasKey = curr.hasKey;
+                let nextHasFlag = curr.hasFlag;
+
+                // Pick up Key in Level 2
+                if (!nextHasKey && nr === level.keyPos.r && nc === level.keyPos.c) {
+                    nextHasKey = true;
+                }
+                // Pick up Flag in Level 1
+                if (!nextHasFlag && nr === level.flagPos.r && nc === level.flagPos.c) {
+                    nextHasFlag = true;
+                }
+
+                const nextNode = new StateNode(nr, nc, curr.holder, nextHasKey, nextHasFlag, curr, {
+                    type: 'move',
+                    dr: dir.dr,
+                    dc: dir.dc,
+                    label: dir.label
+                });
+
+                if (!visited.has(nextNode.key())) {
+                    visited.add(nextNode.key());
+                    queue.push(nextNode);
+                }
+            }
+        }
+
+        // Transition 2: Swap diamond control (if on a green tile)
+        const onGreen = level.greenTiles.some(g => g.r === curr.r && g.c === curr.c);
+        if (onGreen) {
+            const nextHolder = curr.holder === 'Fish' ? 'Adam' : 'Fish';
+            const nextNode = new StateNode(curr.r, curr.c, nextHolder, curr.hasKey, curr.hasFlag, curr, {
+                type: 'swap',
+                nextHolder: nextHolder
+            });
+
+            if (!visited.has(nextNode.key())) {
+                visited.add(nextNode.key());
+                queue.push(nextNode);
+            }
+        }
+    }
+
+    return null; // Unsolvable state
+}
+
+function runNextAIStep() {
+    if (!gameState.running) return;
+
+    if (gameState.aiActions.length === 0) {
+        clearInterval(gameState.aiTimer);
+        gameState.aiTimer = null;
+        return;
+    }
+
+    const action = gameState.aiActions.shift();
+    const isFish = gameState.diamondHolder === 'Fish';
+    const sender = isFish ? 'Estella' : 'Adam';
+
+    if (action.type === 'move') {
+        const success = attemptMove(action.dr, action.dc);
+        if (success) {
+            addChat(sender, `Executing step: moving ${action.label}.`);
+        }
+    } else if (action.type === 'swap') {
+        passControl();
+        if (action.nextHolder === 'Adam') {
+            addChat('Estella', "Passing control to you, Adam. Use the diamond's level boundaries now!");
+        } else {
+            addChat('Adam', "Control returned to you, Estella. Pull us through on your side!");
+        }
+    }
 }
 
 function gameLoop() {
     if(!gameState.running) return;
     draw();
     requestAnimationFrame(gameLoop);
+}
+
+function draw() {
+    const level = LEVELS[currentLevelIndex];
+    drawGrid(ctx1, level.l1.vWalls, level.l1.hWalls, gameState.fish, '#38bdf8', false, level.cols, level.rows, level.tileSize); 
+    updateUI();
 }
 
 function drawGrid(ctx, vWalls, hWalls, player, playerColor, isAdam, cols, rows, tileSize) {
@@ -396,14 +585,8 @@ function drawGrid(ctx, vWalls, hWalls, player, playerColor, isAdam, cols, rows, 
     ctx.restore();
 }
 
-function draw() {
-    const level = LEVELS[currentLevelIndex];
-    drawGrid(ctx1, level.l1.vWalls, level.l1.hWalls, gameState.fish, '#38bdf8', false, level.cols, level.rows, level.tileSize); 
-    updateUI();
-}
-
 function updateUI() {
-    document.getElementById('diamond-holder').innerText = gameState.diamondHolder;
+    document.getElementById('diamond-holder').innerText = gameState.diamondHolder === 'Fish' ? (gameMode === 'player' ? 'Fish' : 'Estella') : 'Adam';
     document.getElementById('key-status').innerText = gameState.hasKey ? "Collected" : "Missing";
     document.getElementById('key-status').className = 'status-val ' + (gameState.hasKey ? 'green' : 'red');
     document.getElementById('flag-status').innerText = gameState.hasFlag ? "Captured" : "Not Captured";
@@ -413,7 +596,17 @@ function updateUI() {
     const fOnGreen = level.greenTiles.some(g => g.r === gameState.fish.r && g.c === gameState.fish.c);
     const aOnGreen = level.greenTiles.some(g => g.r === gameState.adam.r && g.c === gameState.adam.c);
     
-    passBtn.disabled = !(fOnGreen && aOnGreen);
+    // Disable inputs & pass button in Autopilot mode
+    if (gameMode === 'ai') {
+        passBtn.disabled = true;
+        chatInput.disabled = true;
+        sendBtn.disabled = true;
+    } else {
+        passBtn.disabled = !(fOnGreen && aOnGreen);
+        chatInput.disabled = false;
+        sendBtn.disabled = false;
+    }
+
     if (!passBtn.disabled) {
         passBtn.style.boxShadow = '0 0 15px rgba(34, 197, 94, 0.6)';
         passBtn.style.border = '2px solid #22c55e';
@@ -423,16 +616,18 @@ function updateUI() {
     }
 
     // Set button innerText dynamically
+    const fishName = gameMode === 'player' ? 'Fish' : 'Estella';
     if (gameState.diamondHolder === 'Fish') {
-        passBtn.innerText = "Pass Control to Adam";
+        passBtn.innerText = `Pass Control to Adam`;
     } else {
-        passBtn.innerText = "Pass Control to Fish";
+        passBtn.innerText = `Pass Control to ${fishName}`;
     }
 }
 
-// Arrow Key Movements (Allowed only when Fish has Diamond)
+// Arrow Key Movements (Allowed only when Fish has Diamond and in Player mode)
 document.addEventListener('keydown', (e) => {
     if(!gameState.running) return;
+    if(gameMode !== 'player') return;
     if(gameState.diamondHolder !== 'Fish') return;
 
     let dr = 0, dc = 0;
@@ -524,12 +719,13 @@ function attemptMove(dr, dc) {
 }
 
 function passControl() {
+    const fishName = gameMode === 'player' ? 'Fish' : 'Estella';
     if(gameState.diamondHolder === 'Fish') {
         gameState.diamondHolder = 'Adam';
-        addChat('System', 'Control passed to Adam. Arrow keys are locked; send him instructions via chat!');
+        addChat('System', `Control passed to Adam. Arrow keys are locked; send him instructions via chat!`);
     } else {
         gameState.diamondHolder = 'Fish';
-        addChat('System', 'Control passed back to you. You can move using Arrow Keys.');
+        addChat('System', `Control passed back to ${fishName}. You can move using Arrow Keys.`);
     }
     updateUI();
 }
@@ -553,7 +749,7 @@ document.getElementById('restart-game-btn').addEventListener('click', () => {
 function sendChat() {
     const text = chatInput.value.trim();
     if(text) {
-        addChat('Fish', text);
+        addChat(gameMode === 'player' ? 'Fish' : 'Estella', text);
         chatInput.value = '';
         setTimeout(() => handleAdamReply(text), 700);
     }
@@ -561,7 +757,7 @@ function sendChat() {
 
 function addChat(sender, msg) {
     const div = document.createElement('div');
-    if(sender === 'Fish') div.className = 'chat-msg msg-fish';
+    if(sender === 'Fish' || sender === 'Estella') div.className = 'chat-msg msg-fish';
     else if(sender === 'Adam') div.className = 'chat-msg msg-adam';
     else div.className = 'chat-msg msg-system';
 
@@ -572,6 +768,8 @@ function addChat(sender, msg) {
 
 // Proactive AI replies
 function triggerAdamProactive(eventType, data = {}) {
+    if (gameMode !== 'player') return; // Disable proactive triggers in autopilot
+
     const level = LEVELS[currentLevelIndex];
     const a = gameState.adam;
     const fOnGreen = level.greenTiles.some(g => g.r === gameState.fish.r && g.c === gameState.fish.c);
@@ -615,13 +813,12 @@ function handleAdamReply(msg) {
         const aOnGreen = level.greenTiles.some(g => g.r === gameState.adam.r && g.c === gameState.adam.c);
         
         if (fOnGreen && aOnGreen) {
-            // Check if they are passing in the correct direction
             if (wantsPassToAdam && gameState.diamondHolder === 'Fish') {
                 passControl();
                 addChat('Adam', "Diamond received! I'll take control. Tell me where to move (e.g. 'go right').");
             } else if (wantsPassToFish && gameState.diamondHolder === 'Adam') {
                 passControl();
-                addChat('Adam', "Control returned to you! Lead the way with your Arrow Keys.");
+                addChat('Adam', `Control returned to you! Lead the way with your Arrow Keys.`);
             } else {
                 addChat('Adam', `The Diamond is already held by ${gameState.diamondHolder}!`);
             }
@@ -691,5 +888,12 @@ function handleAdamReply(msg) {
     addChat('Adam', responses[Math.floor(Math.random()*responses.length)]);
 }
 
-document.getElementById('start-btn').addEventListener('click', initGame);
-document.getElementById('restart-btn').addEventListener('click', () => location.reload());
+// Mode Selection Buttons Binding
+document.getElementById('start-player-btn').addEventListener('click', () => selectMode('player'));
+document.getElementById('start-ai-btn').addEventListener('click', () => selectMode('ai'));
+
+document.getElementById('restart-btn').addEventListener('click', () => {
+    document.getElementById('end-screen').classList.add('hidden');
+    document.getElementById('main-ui').classList.add('hidden');
+    document.getElementById('start-screen').classList.remove('hidden');
+});

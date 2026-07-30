@@ -16,13 +16,14 @@
             <div class="instructions">
                 <p><strong>Goal:</strong> Find the flag and reach the exit!</p>
                 <p><strong>Entanglement:</strong> You and Adam move at the exact same time. However, only the player holding the <strong>Diamond</strong> checks for walls. The other player is dragged through obstacles!</p>
-                <p><strong>Blind Collaboration:</strong> You can only see your own maze (Level 1). Adam's maze (Level 2) is completely hidden from you. You must communicate via chat to coordinate!</p>
+                <p><strong>Blind Collaboration:</strong> You can only see your own maze (Level 1). Adam's maze (Level 2) is completely hidden. You must communicate via chat to coordinate!</p>
                 <p><strong>Passing Control:</strong> You can only pass the Diamond when BOTH of you are standing on a <strong>Green Circle</strong>.</p>
-                <p><strong>Keys & Pink Walls:</strong> Find the Blue Key in Adam's maze to unlock the Pink Walls.</p>
-                <p><strong>Chat:</strong> Speak to Adam to plan moves, ask what he sees, or tell him where to go.</p>
-                <p><strong>Controls:</strong> Arrow Keys to move when you have the Diamond.</p>
+                <p><strong>Autopilot Mode:</strong> Select "Watch AI vs AI" to let Estella (Fish Bot) and Adam (Researcher Bot) coordinate and solve the 15 levels together!</p>
             </div>
-            <button id="start-btn">Start Game</button>
+            <div class="mode-buttons">
+                <button id="start-player-btn">Play Against AI</button>
+                <button id="start-ai-btn">Watch AI vs AI (Autopilot)</button>
+            </div>
         </div>
 
         <!-- Main Game UI -->
@@ -30,6 +31,10 @@
             <div class="status-bar">
                 <div class="status-item">
                     <span class="label" id="level-display">Level 1 / 15</span>
+                </div>
+                <div class="status-item">
+                    <span class="label">Mode:</span>
+                    <span id="mode-display" class="status-val shiny">Player vs AI</span>
                 </div>
                 <div class="status-item">
                     <span class="label">Control (Diamond):</span>

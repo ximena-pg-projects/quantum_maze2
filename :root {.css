@@ -79,10 +79,17 @@ body {
     border-radius: 8px;
     line-height: 1.6;
     border: 1px solid var(--border-color);
+    max-height: 300px;
+    overflow-y: auto;
 }
 
 .instructions p {
     margin-bottom: 1rem;
+}
+
+.mode-buttons {
+    display: flex;
+    gap: 15px;
 }
 
 button {
@@ -102,6 +109,15 @@ button:hover {
     background-color: #7dd3fc;
     transform: scale(1.03);
     box-shadow: 0 0 15px rgba(56, 189, 248, 0.4);
+}
+
+#start-ai-btn {
+    background-color: var(--accent-magenta);
+}
+
+#start-ai-btn:hover {
+    background-color: #f472b6;
+    box-shadow: 0 0 15px rgba(236, 72, 153, 0.4);
 }
 
 button:disabled {
@@ -239,6 +255,14 @@ canvas {
     align-self: flex-start;
     border-bottom-left-radius: 2px;
     border-left: 3px solid var(--accent-magenta);
+}
+
+.msg-estella {
+    background: #0d1e3d;
+    color: #e2e8f0;
+    align-self: flex-end;
+    border-bottom-right-radius: 2px;
+    border-right: 3px solid var(--accent-blue);
 }
 
 .msg-fish {
